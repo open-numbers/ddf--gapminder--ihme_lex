@@ -1,0 +1,101 @@
+info:
+    id: cme-sg-dataset
+    base:
+        - &d1 open-numbers/ddf--ihme--lex
+
+config:
+    # the path to search recipe files to include
+    recipes_dir: ./
+    # the path to search dictionary files
+    dictionary_dir: ../translation_dictionaries
+
+include:
+    - recipe_gw_common.yaml
+
+ingredients:
+    - id: ihme-lex-datapoints
+      dataset: *d1
+      key: location, sex, age, year
+      value:
+          - mean
+    - id: ihme-lex-location
+      dataset: *d1
+      key: location
+      value: "*"
+
+
+cooking:
+    datapoints:
+        # LEX
+        - procedure: translate_column
+          ingredients:
+              - ihme-lex-location
+          result: ihme-lex-location-aligned
+          options:
+              column: name
+              target_column: geo
+              dictionary:
+                  base: gm-country-synonym
+                  key: synonym
+                  value: geo
+        - procedure: translate_column
+          ingredients:
+              - ihme-lex-datapoints
+          result: ihme-lex-datapoints-translated
+          options:
+              column: location
+              dictionary:
+                  base: ihme-lex-location-aligned
+                  key: location
+                  value: geo
+
+        - procedure: translate_header
+          ingredients:
+              - ihme-lex-datapoints-translated
+          result: ihme-lex-datapoints-aligned
+          options:
+              dictionary:
+                  location: geo
+                  year: time
+              debug: true
+        - procedure: filter
+          ingredients:
+              - ihme-lex-datapoints-aligned
+          options:
+              row:
+                  $and:
+                      age:
+                          $eq: "22"  # all ages
+                      sex:
+                          $eq: "3"   # both sexes
+          result: ihme-lex-datapoints-filtered
+
+        - procedure: flatten
+          ingredients:
+              - ihme-lex-datapoints-filtered
+          options:
+              flatten_dimensions:
+                  - age
+                  - sex
+              dictionary:
+                  mean: life_expectancy_years
+          result: ihme-lex-datapoints-final
+
+    concepts:
+        - procedure: extract_concepts
+          ingredients:
+              -  ihme-lex-datapoints-final
+          result: ihme-lex-datapoints-concepts
+        - procedure: merge
+          ingredients:
+              - ihme-lex-datapoints-concepts
+              - gw-concepts-geo
+              - gw-concepts-discrete
+          options:
+              deep: true
+          result: concepts-final
+
+serving:
+    - id: ihme-lex-datapoints-final
+    - id: gw-entities-geo
+    - id: concepts-final
